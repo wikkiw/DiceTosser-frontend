@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: start;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            margin-top: 20px;
+        }
+        .chart-container, .table-container {
+            box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+            background: #fff;
+            margin: 20px 0;
+            padding: 20px;
+            border-radius: 8px;
+            min-height: 30vh;
+            min-width: 50vw;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+        tr:hover {background-color: #f5f5f5;}
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        @media (min-width: 768px) {
+            .flex-row {
+                display: flex;
+                justify-content: space-between;
+            }
+            .chart-container, .table-container {
+                width: 48%;
+            }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="flex-row">
+            <div class="chart-container">
+                <canvas id="histogram"></canvas>
+            </div>
+        </div>
+        <div class="flex-row">
+            <div class="table-container">
+                <table id="statsTable">
+                    <thead>
+                        <tr>
+                            <th>Toss</th>
+                            <th>Count</th>
+                            <th>Optimal</th>
+                            <th>Percentage</th>
+                            <th>Difference</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Table rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <button id="removeDataBtn"><b>Remove Data</b></button>
+    </div>
+    <script>
+        const ctx = document.getElementById('histogram').getContext('2d');
+        let chart;
+
+        function fetchData() {
+            fetch('/data')
+                .then(response => response.json())
+                .then(data => {
+                    const labels = Object.keys(data);
+                    const counts = Object.values(data);
+                    const total = counts.reduce((acc, val) => acc + val, 0);
+                    const percentages = counts.map(count => (count / total * 100).toFixed(2));
+
+                    // Update histogram
+                    if (chart) {
+                        chart.data.labels = labels;
+                        chart.data.datasets[0].data = percentages;
+                        chart.data.datasets[1].data = [1/12*100, 2/12*100, 3/12*100, 3/12*100, 2/12*100, 1/12*100]
+                        chart.update();
+                    } else {
+                        chart = new Chart(ctx, {
+                            type: 'bar',
+                            data: {
+                                labels: labels,
+                                datasets: [{
+                                    label: 'Percentage',
+                                    data: percentages,
+                                    backgroundColor: 'rgba(154, 162, 235, 0.3)',
+                                    borderColor: 'rgba(154, 162, 235, 1)',
+                                    borderWidth: 0
+                                },
+                                {
+                                    label: 'Optimal',
+                                    data: [1/12*100, 2/12*100, 3/12*100, 3/12*100, 2/12*100, 1/12*100],
+                                    backgroundColor: 'rgba(54, 162, 35, 0)',
+                                    borderColor: 'rgba(54, 162, 35, 1)',
+                                    borderWidth: 2
+                                }]
+                            },
+                            options: {
+                                maintainAspectRatio: false,
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        ticks: {
+                                            callback: function(value) {
+                                                return value + "%";
+                                            }
+                                        }
+                                    }
+                                },
+                                grouped: false
+                            }
+                        });
+                    }
+
+                    // Populate table
+                    const tbody = document.querySelector("#statsTable tbody");
+                    tbody.innerHTML = ""; // Clear existing rows
+                    labels.forEach((label, index) => {
+                        const row = tbody.insertRow();
+                        const cell1 = row.insertCell(0);
+                        const cell2 = row.insertCell(1);
+                        const cell3 = row.insertCell(2);
+                        const cell4 = row.insertCell(3);
+                        const cell5 = row.insertCell(4);
+                        cell1.textContent = label;
+                        cell2.textContent = counts[index];
+                        cell4.textContent = percentages[index] + "%";
+                        cell3.textContent = [1/12*100, 2/12*100, 3/12*100, 3/12*100, 2/12*100, 1/12*100, 0][index].toFixed(2) + "%";
+                        cell5.textContent = ([1/12*100, 2/12*100, 3/12*100, 3/12*100, 2/12*100, 1/12*100, 0][index] - percentages[index]).toFixed(2) + "%";
+                    });
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        fetchData();
+        setInterval(fetchData, 1000); // Update the chart and table every 1 seconds
+        
+        document.getElementById('removeDataBtn').addEventListener('click', function() {
+          fetch('/remove-data', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+          })
+          .then(response => response.json())
+          .then(data => {
+              if(data.success) {
+                  alert('Data removed successfully');
+                  // Optionally, refresh the data on the page
+                  fetchData();
+                  document.location.reload(true);
+              } else {
+                  alert('Failed to remove data: ' + data.error);
+              }
+          })
+          .catch(error => console.error('Error:', error));
+        });
+    
+    </script>
+</body>
+</html>
